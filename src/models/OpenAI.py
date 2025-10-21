@@ -52,7 +52,10 @@ class OpenAIV1Model(OpenAIModel):
                 azure_endpoint=api_base
             )
         else:
-            self.client = OpenAI(api_key=api_key)
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=api_base
+            )
 
         self.model_name = model_name
 

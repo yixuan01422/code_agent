@@ -68,6 +68,10 @@ def parse_response(response: str) -> str:
 
     code_blocks = re.findall(code_pattern, response, re.DOTALL)
 
+    # Check if code_blocks is empty to avoid IndexError
+    if not code_blocks or len(code_blocks) == 0:
+        return ""
+    
     if type(code_blocks[-1]) == tuple or type(code_blocks[-1]) == list:
         code_str = "\n".join(code_blocks[-1])
     elif type(code_blocks[-1]) == str:

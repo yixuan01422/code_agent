@@ -314,16 +314,25 @@ class CodeSIM(DirectStrategy):
                 print(f"Input for final code generation:\n\n")
                 print(input_for_final_code_generation[0]['content'], flush=True)
 
-            response = self.gpt_chat(
-                input_for_final_code_generation
-            )
-
-            if self.verbose >= VERBOSE_FULL:
-                print("\n\n" + "_" * 70)
-                print(f"Response from final code generation:\n\n")
-                print(response, flush=True)
-
-            code = parse_response(response)
+            # Retry mechanism for code generation
+            MAX_RETRY = 3
+            code = ""
+            
+            for retry in range(MAX_RETRY):
+                response = self.gpt_chat(input_for_final_code_generation)
+                code = parse_response(response)
+                
+                if code and len(code.strip()) > 0:
+                    # Success: print response
+                    if self.verbose >= VERBOSE_FULL:
+                        print("\n\n" + "_" * 70)
+                        print(f"Response from final code generation:\n\n")
+                        print(response, flush=True)
+                    break
+                else:
+                    # Failed: print retry info
+                    if self.verbose >= VERBOSE_FULL:
+                        print(f"\n⚠️  Empty code extracted from final code generation, retry {retry+1}/{MAX_RETRY}")
 
             passed, test_log = self.check(data_row, additional_io, code)
 
@@ -354,14 +363,25 @@ class CodeSIM(DirectStrategy):
                     print(f"Input for Improving code: {plan_no}, {debug_no}\n\n")
                     print(input_for_debugging[0]['content'], flush=True)
 
-                response = self.gpt_chat(input_for_debugging)
-
-                if self.verbose >= VERBOSE_FULL:
-                    print("\n\n" + "_" * 70)
-                    print(f"Response from Improving code: {plan_no}, {debug_no}\n\n")
-                    print(response, flush=True)
-
-                code = parse_response(response)
+                # Retry mechanism for debugging
+                MAX_RETRY = 3
+                code = ""
+                
+                for retry in range(MAX_RETRY):
+                    response = self.gpt_chat(input_for_debugging)
+                    code = parse_response(response)
+                    
+                    if code and len(code.strip()) > 0:
+                        # Success: print response
+                        if self.verbose >= VERBOSE_FULL:
+                            print("\n\n" + "_" * 70)
+                            print(f"Response from Improving code: {plan_no}, {debug_no}\n\n")
+                            print(response, flush=True)
+                        break
+                    else:
+                        # Failed: print retry info
+                        if self.verbose >= VERBOSE_FULL:
+                            print(f"\n⚠️  Empty code extracted from debugging, retry {retry+1}/{MAX_RETRY}")
 
                 passed, test_log = self.check(data_row, additional_io, code)
 
