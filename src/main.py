@@ -60,6 +60,19 @@ parser.add_argument(
     "--model",
     type=str,
     default="ChatGPT",
+    help="Model name (deprecated, use --model1 instead for consistency)"
+)
+parser.add_argument(
+    "--model1",
+    type=str,
+    default=None,
+    help="Primary model name"
+)
+parser.add_argument(
+    "--model2",
+    type=str,
+    default=None,
+    help="Secondary model name (optional, for dual-model mode)"
 )
 parser.add_argument(
     "--model_provider",
@@ -142,7 +155,17 @@ args = parser.parse_args()
 
 DATASET = args.dataset
 STRATEGY = args.strategy
-MODEL_NAME = args.model
+
+# Backward compatibility: support both --model and --model1
+if args.model1:
+    MODEL_NAME_1 = args.model1
+elif args.model:
+    MODEL_NAME_1 = args.model
+else:
+    raise ValueError("Must provide --model1 or --model")
+
+MODEL_NAME_2 = args.model2  # Can be None
+
 MODEL_PROVIDER_NAME = args.model_provider
 TEMPERATURE = args.temperature
 TOP_P = args.top_p
@@ -153,7 +176,21 @@ RESULT_LOG_MODE = args.result_log
 VERBOSE = int(args.verbose)
 STORE_LOG_IN_FILE = args.store_log_in_file
 
-MODEL_NAME_FOR_RUN = MODEL_NAME
+# Generate model name for run directory
+if MODEL_NAME_2:
+    # Dual-model mode: extract short names and combine
+    def extract_short_name(path):
+        if "models--" in path:
+            parts = path.split("models--")[1].split("/")[0]
+            name = "--".join(parts.split("--")[1:])
+            return name.replace("--", "-")
+        else:
+            return os.path.basename(path.rstrip("/"))
+    
+    MODEL_NAME_FOR_RUN = f"{extract_short_name(MODEL_NAME_1)}+{extract_short_name(MODEL_NAME_2)}"
+else:
+    # Single-model mode: use original logic
+    MODEL_NAME_FOR_RUN = MODEL_NAME_1
 
 RUN_NAME = f"results/{DATASET}/{STRATEGY}/{MODEL_NAME_FOR_RUN}/{LANGUAGE}-{TEMPERATURE}-{TOP_P}-{PASS_AT_K}"
 
@@ -187,12 +224,28 @@ Experiment start {RUN_NAME}, Time: {datetime.now()}
 ###################################################
 """)
 
-strategy = PromptingFactory.get_prompting_class(STRATEGY)(
-    model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(
-        model_name=MODEL_NAME, 
+# Initialize model(s)
+model1 = ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(
+    model_name=MODEL_NAME_1, 
+    temperature=TEMPERATURE, 
+    top_p=TOP_P,
+    api_base_env_var="OPENAI_API_BASE"  # For model1
+)
+
+model2 = None
+if MODEL_NAME_2:
+    model2 = ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(
+        model_name=MODEL_NAME_2, 
         temperature=TEMPERATURE, 
-        top_p=TOP_P
-    ),
+        top_p=TOP_P,
+        api_base_env_var="OPENAI_API_BASE_2"  # For model2
+    )
+
+strategy = PromptingFactory.get_prompting_class(STRATEGY)(
+    model=model1,
+    model2=model2,
+    model1_path=MODEL_NAME_1,
+    model2_path=MODEL_NAME_2,
     data=DatasetFactory.get_dataset_class(DATASET)(),
     language=LANGUAGE,
     pass_at_k=PASS_AT_K,
@@ -209,7 +262,16 @@ Experiment end {RUN_NAME}, Time: {datetime.now()}
 ###################################################
 """)
 
-gen_summary(RESULTS_PATH, SUMMARY_PATH)
+# Prepare model statistics for summary
+model_stats = {
+    'model1_path': MODEL_NAME_1,
+    'model2': MODEL_NAME_2,
+    'model2_path': MODEL_NAME_2,
+    'model1_stats': strategy.model1_stats,
+    'model2_stats': strategy.model2_stats
+}
+
+gen_summary(RESULTS_PATH, SUMMARY_PATH, model_stats)
 
 ET_RESULTS_PATH = f"{RUN_NAME}/Results-ET.jsonl"
 ET_SUMMARY_PATH = f"{RUN_NAME}/Summary-ET.txt"
@@ -219,14 +281,14 @@ EP_SUMMARY_PATH = f"{RUN_NAME}/Summary-EP.txt"
 
 if "human" in DATASET.lower():
     generate_et_dataset_human(RESULTS_PATH, ET_RESULTS_PATH)
-    gen_summary(ET_RESULTS_PATH, ET_SUMMARY_PATH)
+    gen_summary(ET_RESULTS_PATH, ET_SUMMARY_PATH, model_stats)
 
     # generate_ep_dataset_human(RESULTS_PATH, EP_RESULTS_PATH)
     # run_eval_plus(EP_RESULTS_PATH, EP_SUMMARY_PATH, "humaneval")
 
 elif "mbpp" in DATASET.lower():
     generate_et_dataset_mbpp(RESULTS_PATH, ET_RESULTS_PATH)
-    gen_summary(ET_RESULTS_PATH, ET_SUMMARY_PATH)
+    gen_summary(ET_RESULTS_PATH, ET_SUMMARY_PATH, model_stats)
 
     # generate_ep_dataset_human(RESULTS_PATH, EP_RESULTS_PATH)
     # run_eval_plus(EP_RESULTS_PATH, EP_SUMMARY_PATH, "mbpp")

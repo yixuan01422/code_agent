@@ -45,16 +45,20 @@ class OpenAIV1Model(OpenAIModel):
         if model_name is None:
             raise Exception("Model name is required")
         
+        # Support custom API base URL via api_base_env_var parameter
+        api_base_env_var = kwargs.get("api_base_env_var", "OPENAI_API_URL")
+        custom_api_base = os.getenv(api_base_env_var, api_base)
+        
         if api_type == "azure":
             self.client = AzureOpenAI(
                 api_key=api_key,
                 api_version=api_version,
-                azure_endpoint=api_base
+                azure_endpoint=custom_api_base
             )
         else:
             self.client = OpenAI(
                 api_key=api_key,
-                base_url=api_base
+                base_url=custom_api_base
             )
 
         self.model_name = model_name

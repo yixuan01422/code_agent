@@ -114,6 +114,18 @@ class CodeSIM(DirectStrategy):
 
     def run_single_pass(self, data_row: dict):
         print("", flush=True)
+        
+        # Print model configuration at the start (only once)
+        if not hasattr(self, '_model_config_printed'):
+            if self.verbose >= VERBOSE_FULL:
+                print("=" * 70)
+                print("=== Model Configuration ===")
+                print(f"Model 1: {self.model1_path}")
+                if self.model2:
+                    print(f"Model 2: {self.model2_path}")
+                print("=" * 70)
+                print("", flush=True)
+            self._model_config_printed = True
 
         problem = self.data.get_prompt(data_row)
 
@@ -218,7 +230,8 @@ class CodeSIM(DirectStrategy):
                 print(input_for_planning[0]['content'], flush=True)
 
             response = self.gpt_chat(
-                processed_input=input_for_planning
+                processed_input=input_for_planning,
+                use_model=1
             )
 
             if self.verbose >= VERBOSE_FULL:
@@ -255,7 +268,8 @@ class CodeSIM(DirectStrategy):
                 print(input_for_simulation[0]['content'], flush=True)
 
             response = self.gpt_chat(
-                processed_input=input_for_simulation
+                processed_input=input_for_simulation,
+                use_model=1
             )
 
             if self.verbose >= VERBOSE_FULL:
@@ -287,7 +301,8 @@ class CodeSIM(DirectStrategy):
                     print(input_for_plan_refinement[0]['content'], flush=True)
 
                 plan = self.gpt_chat(
-                    processed_input=input_for_plan_refinement
+                    processed_input=input_for_plan_refinement,
+                    use_model=1
                 )
 
                 if self.verbose >= VERBOSE_FULL:
@@ -319,14 +334,14 @@ class CodeSIM(DirectStrategy):
             code = ""
             
             for retry in range(MAX_RETRY):
-                response = self.gpt_chat(input_for_final_code_generation)
+                response = self.gpt_chat(input_for_final_code_generation, use_model=1)
                 code = parse_response(response)
                 
                 if code and len(code.strip()) > 0:
                     # Success: print response
                     if self.verbose >= VERBOSE_FULL:
                         print("\n\n" + "_" * 70)
-                        print(f"Response from final code generation:\n\n")
+                        print(f"Response from final code generation (Model 1):\n\n")
                         print(response, flush=True)
                     break
                 else:
@@ -368,14 +383,14 @@ class CodeSIM(DirectStrategy):
                 code = ""
                 
                 for retry in range(MAX_RETRY):
-                    response = self.gpt_chat(input_for_debugging)
+                    response = self.gpt_chat(input_for_debugging, use_model=2)
                     code = parse_response(response)
                     
                     if code and len(code.strip()) > 0:
                         # Success: print response
                         if self.verbose >= VERBOSE_FULL:
                             print("\n\n" + "_" * 70)
-                            print(f"Response from Improving code: {plan_no}, {debug_no}\n\n")
+                            print(f"Response from Improving code: {plan_no}, {debug_no} (Model 2)\n\n")
                             print(response, flush=True)
                         break
                     else:

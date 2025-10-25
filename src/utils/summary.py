@@ -3,7 +3,7 @@ import json
 from utils.jsonl import read_jsonl, write_jsonl
 
 
-def gen_summary(results_path: str, summary_path: str):
+def gen_summary(results_path: str, summary_path: str, model_stats: dict = None):
     results = pd.DataFrame(read_jsonl(results_path))
 
     if "api_calls" not in results:
@@ -38,6 +38,15 @@ def gen_summary(results_path: str, summary_path: str):
         # Define a width for alignment
         name_width = 30
         value_width = 10
+
+        # Write model configuration if model_stats is provided (dual-model mode)
+        if model_stats and model_stats.get('model2'):
+            summary_file.write("=" * 70 + "\n")
+            summary_file.write("=== Model Configuration ===\n")
+            summary_file.write(f"Model 1: {model_stats.get('model1_path', 'N/A')}\n")
+            summary_file.write(f"Model 2: {model_stats.get('model2_path', 'N/A')}\n")
+            summary_file.write("=" * 70 + "\n")
+            summary_file.write("\n")
 
         summary_file.write(f"{'Accuracy:':<{name_width}} {accuracy*100:>{value_width}.01f}\n")
         summary_file.write(f"{'Solved:':<{name_width}} {solved:>{value_width}}\n")
@@ -75,4 +84,41 @@ def gen_summary(results_path: str, summary_path: str):
         # Printing all keys and their values (Unsolved)
         for key, value in false_results.items():
             summary_file.write(f"{key:<{name_width}} {value:>{value_width}}\n")
+        
+        # Write model-wise statistics if dual-model mode
+        if model_stats and model_stats.get('model2'):
+            summary_file.write(f"\n")
+            summary_file.write("=" * 70 + "\n")
+            summary_file.write("=== Model-wise Statistics ===\n")
+            summary_file.write(f"\n")
+            
+            # Calculate model statistics from Results.jsonl
+            model1_calls = 0
+            model1_prompt_tokens = 0
+            model1_completion_tokens = 0
+            model2_calls = 0
+            model2_prompt_tokens = 0
+            model2_completion_tokens = 0
+            
+            for _, row in results.iterrows():
+                for rd in row['run_details']:
+                    model1_calls += rd.get('model1_calls', 0)
+                    model1_prompt_tokens += rd.get('model1_prompt_tokens', 0)
+                    model1_completion_tokens += rd.get('model1_completion_tokens', 0)
+                    model2_calls += rd.get('model2_calls', 0)
+                    model2_prompt_tokens += rd.get('model2_prompt_tokens', 0)
+                    model2_completion_tokens += rd.get('model2_completion_tokens', 0)
+            
+            # Model 1 Statistics
+            summary_file.write("Model 1 Statistics:\n")
+            summary_file.write(f"  {'Total Api Calls:':<{name_width-2}} {model1_calls:>{value_width}}\n")
+            summary_file.write(f"  {'Total Prompt Tokens:':<{name_width-2}} {model1_prompt_tokens:>{value_width}}\n")
+            summary_file.write(f"  {'Total Completion Tokens:':<{name_width-2}} {model1_completion_tokens:>{value_width}}\n")
+            summary_file.write(f"\n")
+            
+            # Model 2 Statistics
+            summary_file.write("Model 2 Statistics:\n")
+            summary_file.write(f"  {'Total Api Calls:':<{name_width-2}} {model2_calls:>{value_width}}\n")
+            summary_file.write(f"  {'Total Prompt Tokens:':<{name_width-2}} {model2_prompt_tokens:>{value_width}}\n")
+            summary_file.write(f"  {'Total Completion Tokens:':<{name_width-2}} {model2_completion_tokens:>{value_width}}\n")
 
