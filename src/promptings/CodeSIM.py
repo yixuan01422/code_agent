@@ -231,7 +231,7 @@ class CodeSIM(DirectStrategy):
 
             response = self.gpt_chat(
                 processed_input=input_for_planning,
-                use_model=1
+                use_model=2  
             )
 
             if self.verbose >= VERBOSE_FULL:
@@ -382,15 +382,18 @@ class CodeSIM(DirectStrategy):
                 MAX_RETRY = 3
                 code = ""
                 
+                # Debug attempts 1-3: use model1, 4-5: use model2
+                debug_model = 1 if debug_no <= 3 else 2
+                
                 for retry in range(MAX_RETRY):
-                    response = self.gpt_chat(input_for_debugging, use_model=2)
+                    response = self.gpt_chat(input_for_debugging, use_model=debug_model)
                     code = parse_response(response)
                     
                     if code and len(code.strip()) > 0:
                         # Success: print response
                         if self.verbose >= VERBOSE_FULL:
                             print("\n\n" + "_" * 70)
-                            print(f"Response from Improving code: {plan_no}, {debug_no} (Model 2)\n\n")
+                            print(f"Response from Improving code: {plan_no}, {debug_no} (Model {debug_model})\n\n")
                             print(response, flush=True)
                         break
                     else:
