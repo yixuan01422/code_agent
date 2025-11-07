@@ -3,6 +3,7 @@ import tiktoken
 import os
 import copy
 import time
+import torch
 
 from models.Base import BaseModel
 from datasets.Dataset import Dataset
@@ -23,11 +24,13 @@ class BaseStrategy(object):
         model2: BaseModel = None,
         model1_path: str = None,
         model2_path: str = None,
+        enable_loss_calculation: bool = False,
     ):
         self.model = model  # model1
         self.model2 = model2  # model2 (optional)
         self.model1_path = model1_path
         self.model2_path = model2_path
+        self.enable_loss_calculation = enable_loss_calculation
         
         self.data = data
         self.pass_at_k = pass_at_k
@@ -47,6 +50,23 @@ class BaseStrategy(object):
             "prompt_tokens": 0,
             "completion_tokens": 0
         }
+        
+        # GPU device mapping for loss calculation mode
+        cuda_visible = os.getenv("CUDA_VISIBLE_DEVICES")
+        if cuda_visible:
+            # Map physical GPU to virtual index
+            gpu_list = cuda_visible.split(',')
+            model1_physical = os.getenv("MODEL1_GPU_PHYSICAL", gpu_list[0])
+            model2_physical = os.getenv("MODEL2_GPU_PHYSICAL", gpu_list[1] if len(gpu_list) > 1 else gpu_list[0])
+            try:
+                self.model1_device = f"cuda:{gpu_list.index(model1_physical)}"
+                self.model2_device = f"cuda:{gpu_list.index(model2_physical)}"
+            except ValueError:
+                self.model1_device = "cuda:0"
+                self.model2_device = "cuda:1" if len(gpu_list) > 1 else "cuda:0"
+        else:
+            self.model1_device = "cuda:0"
+            self.model2_device = "cuda:0"
     
 
     def append_run_details(self, run_details: dict):
@@ -107,16 +127,127 @@ class BaseStrategy(object):
         return response
 
 
+    def gpt_chat_with_loss(
+        self,
+        processed_input: List[dict],
+        generate_model: int = 1,
+        loss_model: int = 2,
+        calculate_reverse: bool = False,
+        temperature: float = None,
+        top_p: float = None,
+        max_tokens: int = None,
+        **kwargs
+    ):
+        """
+        Generate text with one model and calculate loss with another.
+        Uses PyTorch models directly (not vLLM) for both generation and loss calculation.
+        
+        Args:
+            processed_input: Input messages in OpenAI format [{"role": "user", "content": "..."}]
+            generate_model: Model for generation (1 or 2)
+            loss_model: Model for loss calculation (1 or 2)
+            calculate_reverse: If True, also swap models and calculate reverse loss
+            temperature: Sampling temperature (default: from model config)
+            top_p: Nucleus sampling parameter (default: from model config)
+            max_tokens: Maximum tokens to generate (default: from model config)
+            **kwargs: Additional arguments (ignored for PyTorch generation)
+        
+        Returns:
+            dict: {
+                'text': str,           # Generated text from generate_model
+                'loss': float,         # Loss of loss_model on generated text
+                'reverse_text': str,   # (if calculate_reverse) Text from loss_model
+                'reverse_loss': float  # (if calculate_reverse) Loss of generate_model
+            }
+        """
+        from utils.loss_calculator import LossCalculator
+        
+        # Get model paths and devices
+        generate_model_path = self.model1_path if generate_model == 1 else self.model2_path
+        loss_model_path = self.model1_path if loss_model == 1 else self.model2_path
+        generate_device = self.model1_device if generate_model == 1 else self.model2_device
+        loss_device = self.model1_device if loss_model == 1 else self.model2_device
+        
+        if generate_model_path is None:
+            raise ValueError(f"Model {generate_model} path is not configured")
+        if loss_model_path is None:
+            raise ValueError(f"Model {loss_model} path is not configured")
+        
+        # Get generation parameters from model config (if not provided)
+        if temperature is None:
+            temperature = self.model.temperature if hasattr(self.model, 'temperature') else 0.0
+        if top_p is None:
+            top_p = self.model.top_p if hasattr(self.model, 'top_p') else 0.95
+        if max_tokens is None:
+            max_tokens = self.model.max_tokens if hasattr(self.model, 'max_tokens') else 4096
+        
+        # Step 1: Generate with generate_model (using PyTorch)
+        generated_text = LossCalculator.generate(
+            model_path=generate_model_path,
+            messages=processed_input,
+            device=generate_device,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens
+        )
+        
+        # Step 2: Calculate loss with loss_model
+        loss = LossCalculator.calculate_loss(
+            model_path=loss_model_path,
+            messages=processed_input,
+            target=generated_text,
+            device=loss_device
+        )
+        
+        result = {
+            'text': generated_text,
+            'loss': loss
+        }
+        
+        # Step 3: (Optional) Calculate reverse loss
+        if calculate_reverse:
+            # Generate with loss_model
+            reverse_text = LossCalculator.generate(
+                model_path=loss_model_path,
+                messages=processed_input,
+                device=device,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens
+            )
+            
+            # Calculate loss with generate_model
+            reverse_loss = LossCalculator.calculate_loss(
+                model_path=generate_model_path,
+                messages=processed_input,
+                target=reverse_text,
+                device=device
+            )
+            
+            result['reverse_text'] = reverse_text
+            result['reverse_loss'] = reverse_loss
+        
+        return result
+
+
     def run_single_pass(self, data_row: dict):
         pass
 
-    def run(self, record_full_result):
+    def run(self, record_full_result, start_idx=None, end_idx=None):
         # self.data.data.reverse()
         
-        num_items = len(self.data)
+        # Support dataset subset via slicing
+        if start_idx is not None or end_idx is not None:
+            data_subset = self.data[start_idx:end_idx]
+            if self.verbose >= VERBOSE_MINIMAL:
+                print(f"Running on dataset subset: [{start_idx}:{end_idx}] ({len(data_subset)} items)")
+        else:
+            data_subset = self.data
+        
+        num_items = len(data_subset)
         num_success = 0
 
-        for i, data_row in enumerate(self.data):
+        for i, data_row in enumerate(data_subset):
             if self.verbose >= VERBOSE_FULL:
                 print("", flush=True, end="")
 
@@ -159,7 +290,7 @@ class BaseStrategy(object):
                 item["source_codes"].append(cur_imp)
 
                 # Remove Full details
-                if not record_full_result:
+                if not record_full_result and "details" in self.run_details:
                     del self.run_details["details"]
 
                 item["run_details"].append(self.run_details)

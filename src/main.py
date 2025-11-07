@@ -151,6 +151,28 @@ parser.add_argument(
     ]
 )
 
+parser.add_argument(
+    "--start_idx",
+    type=int,
+    default=None,
+    help="Start index for dataset subset (inclusive, 0-based)"
+)
+
+parser.add_argument(
+    "--end_idx",
+    type=int,
+    default=None,
+    help="End index for dataset subset (exclusive, 0-based)"
+)
+
+parser.add_argument(
+    "--enable_loss_calculation",
+    type=str,
+    default="no",
+    choices=["yes", "no"],
+    help="Enable loss calculation mode (uses PyTorch models, no vLLM needed)"
+)
+
 args = parser.parse_args()
 
 DATASET = args.dataset
@@ -250,10 +272,15 @@ strategy = PromptingFactory.get_prompting_class(STRATEGY)(
     language=LANGUAGE,
     pass_at_k=PASS_AT_K,
     results=Results(RESULTS_PATH),
-    verbose=VERBOSE
+    verbose=VERBOSE,
+    enable_loss_calculation=(args.enable_loss_calculation.lower() == "yes")
 )
 
-strategy.run(RESULT_LOG_MODE.lower() == 'full')
+strategy.run(
+    record_full_result=RESULT_LOG_MODE.lower() == 'full',
+    start_idx=args.start_idx,
+    end_idx=args.end_idx
+)
 
 if VERBOSE >= VERBOSE_MINIMAL:
     print(f"""
