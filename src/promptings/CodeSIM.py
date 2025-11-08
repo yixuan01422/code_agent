@@ -29,7 +29,7 @@ class CodeSIM(DirectStrategy):
     def __init__(
         self,
         additional_info_run=0,
-        max_plan_try=5,
+        max_plan_try=1,
         max_debug_try=5,
         *args,
         **kwargs
@@ -262,88 +262,88 @@ class CodeSIM(DirectStrategy):
 
             problem_with_planning = f"## Problem:\n{problem}\n\n{plan}"
 
-            # Simulation Phase
-            input_for_simulation = [
-                {
-                    "role": "user",
-                    "content": prompt_for_simulation.format(
-                        problem_with_planning=problem_with_planning,
-                        language=self.language,
-                    )
-                },
-            ]
+            # # Simulation Phase
+            # input_for_simulation = [
+            #     {
+            #         "role": "user",
+            #         "content": prompt_for_simulation.format(
+            #             problem_with_planning=problem_with_planning,
+            #             language=self.language,
+            #         )
+            #     },
+            # ]
 
-            if self.verbose >= VERBOSE_FULL:
-                print("\n\n" + "_" * 70)
-                print(f"Input for Simulation: {plan_no}\n\n")
-                print(input_for_simulation[0]['content'], flush=True)
+            # if self.verbose >= VERBOSE_FULL:
+            #     print("\n\n" + "_" * 70)
+            #     print(f"Input for Simulation: {plan_no}\n\n")
+            #     print(input_for_simulation[0]['content'], flush=True)
 
-            if self.enable_loss_calculation:
-                result = self.gpt_chat_with_loss(
-                    processed_input=input_for_simulation,
-                    generate_model=1,
-                    loss_model=2,
-                    calculate_reverse=False
-                )
-                response = result['text']
-                self.run_details['simulation_loss'] = result['loss']
-                print(f"[Loss] Simulation: Model2 calculated loss on Model1's generation = {result['loss']:.4f}", flush=True)
-            else:
-                response = self.gpt_chat(
-                    processed_input=input_for_simulation,
-                    use_model=1
-                )
+            # if self.enable_loss_calculation:
+            #     result = self.gpt_chat_with_loss(
+            #         processed_input=input_for_simulation,
+            #         generate_model=1,
+            #         loss_model=2,
+            #         calculate_reverse=False
+            #     )
+            #     response = result['text']
+            #     self.run_details['simulation_loss'] = result['loss']
+            #     print(f"[Loss] Simulation: Model2 calculated loss on Model1's generation = {result['loss']:.4f}", flush=True)
+            # else:
+            #     response = self.gpt_chat(
+            #         processed_input=input_for_simulation,
+            #         use_model=1
+            #     )
 
-            if self.verbose >= VERBOSE_FULL:
-                print("\n\n" + "_" * 70)
-                print(f"Response from Simulation: {plan_no}\n\n")
-                print(response, flush=True)
+            # if self.verbose >= VERBOSE_FULL:
+            #     print("\n\n" + "_" * 70)
+            #     print(f"Response from Simulation: {plan_no}\n\n")
+            #     print(response, flush=True)
 
-            if "Plan Modification Needed" in response and \
-                "No Plan Modification Needed" not in response:
-                if self.verbose >= VERBOSE_FULL:
-                    print("\n\n" + "_" * 70)
-                    print(f"**Plan Modification Needed.**\n")
-                
-                # Plan Refinement Phase
-                input_for_plan_refinement = [
-                    {
-                        "role": "user",
-                        "content": prompt_for_plan_refinement.format(
-                            problem_with_planning=problem_with_planning,
-                            language=self.language,
-                            critique=response
-                        )
-                    },
-                ]
+            # if "Plan Modification Needed" in response and \
+            #     "No Plan Modification Needed" not in response:
+            #     if self.verbose >= VERBOSE_FULL:
+            #         print("\n\n" + "_" * 70)
+            #         print(f"**Plan Modification Needed.**\n")
+            #     
+            #     # Plan Refinement Phase
+            #     input_for_plan_refinement = [
+            #         {
+            #             "role": "user",
+            #             "content": prompt_for_plan_refinement.format(
+            #                 problem_with_planning=problem_with_planning,
+            #                 language=self.language,
+            #                 critique=response
+            #             )
+            #         },
+            #     ]
 
-                if self.verbose >= VERBOSE_FULL:
-                    print("\n\n" + "_" * 70)
-                    print(f"Input for Plan Refinement: {plan_no}\n\n")
-                    print(input_for_plan_refinement[0]['content'], flush=True)
+            #     if self.verbose >= VERBOSE_FULL:
+            #         print("\n\n" + "_" * 70)
+            #         print(f"Input for Plan Refinement: {plan_no}\n\n")
+            #         print(input_for_plan_refinement[0]['content'], flush=True)
 
-                if self.enable_loss_calculation:
-                    result = self.gpt_chat_with_loss(
-                        processed_input=input_for_plan_refinement,
-                        generate_model=1,
-                        loss_model=2,
-                        calculate_reverse=False
-                    )
-                    plan = result['text']
-                    self.run_details['plan_refinement_loss'] = result['loss']
-                    print(f"[Loss] Plan Refinement: Model2 calculated loss on Model1's generation = {result['loss']:.4f}", flush=True)
-                else:
-                    plan = self.gpt_chat(
-                        processed_input=input_for_plan_refinement,
-                        use_model=1
-                    )
+            #     if self.enable_loss_calculation:
+            #         result = self.gpt_chat_with_loss(
+            #             processed_input=input_for_plan_refinement,
+            #             generate_model=1,
+            #             loss_model=2,
+            #             calculate_reverse=False
+            #         )
+            #         plan = result['text']
+            #         self.run_details['plan_refinement_loss'] = result['loss']
+            #         print(f"[Loss] Plan Refinement: Model2 calculated loss on Model1's generation = {result['loss']:.4f}", flush=True)
+            #     else:
+            #         plan = self.gpt_chat(
+            #             processed_input=input_for_plan_refinement,
+            #             use_model=1
+            #         )
 
-                if self.verbose >= VERBOSE_FULL:
-                    print("\n\n" + "_" * 70)
-                    print(f"Response from Plan Refinement: {plan_no}\n\n")
-                    print(plan, flush=True)
-                
-                problem_with_planning = f"## Problem:\n{problem}\n\n{plan}"
+            #     if self.verbose >= VERBOSE_FULL:
+            #         print("\n\n" + "_" * 70)
+            #         print(f"Response from Plan Refinement: {plan_no}\n\n")
+            #         print(plan, flush=True)
+            #     
+            #     problem_with_planning = f"## Problem:\n{problem}\n\n{plan}"
 
             # Code generation
             input_for_final_code_generation = [
