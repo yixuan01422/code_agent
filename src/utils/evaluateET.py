@@ -20,6 +20,10 @@ def generate_et_dataset_human(
     correct_count = 0
     et_results = []
     for key, value in data_dict.items():
+        # Skip if no result (e.g., when running subset of dataset)
+        if "result" not in value:
+            continue
+        
         item = value["et_item"]
         result = value["result"]
         generated_code = result["source_codes"][0] if "source_codes" in result else result["solution"]
